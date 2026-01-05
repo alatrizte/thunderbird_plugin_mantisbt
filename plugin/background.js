@@ -24,11 +24,54 @@ async function sendToMantis() {
     }
 
     try {
+        // === 1. Procesar adjuntos (versión que SÍ encuentra tu octet-stream) ===
+        const attachments = [];
+
+        async function findAttachmentsRecursively(parts) {
+            for (const part of parts) {
+                console.log(`Analizando parte: partName=${part.partName}, contentType=${part.contentType}, filename=${part.filename}, name=${part.name}`); // DEBUG: mira esto en consola
+
+                // Si es contenedor, buceamos
+                if (part.parts && part.parts.length > 0) {
+                    await findAttachmentsRecursively(part.parts);
+                    continue;
+                }
+
+                // CLAVE: adjunto si NO es texto/HTML/multipart Y tiene partName (para getAttachmentFile)
+                const isTextOrHtml = part.contentType?.startsWith('text/') || part.contentType?.startsWith('multipart/');
+                if (!isTextOrHtml && part.partName) {
+                    // Prioridad: filename > name > "sin_nombre"
+                    const fileName = part.filename || part.name || "archivo_sin_nombre";
+                    
+                    try {
+                        console.log(`¡ADJUNTO DETECTADO! ${fileName} (${part.contentType})`);
+                        const file = await messenger.messages.getAttachmentFile(message.id, part.partName);
+                        const arrayBuffer = await file.arrayBuffer();
+                        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+                        attachments.push({
+                            name: fileName,
+                            content_type: part.contentType || "application/octet-stream",
+                            content: base64
+                        });
+                    } catch (err) {
+                        console.error(`Error cargando ${fileName}:`, err);
+                    }
+                }
+            }
+        }
+
+        // Lanzamos
+        if (full.parts && full.parts.length > 0) {
+            console.log("Iniciando búsqueda en parts...");
+            await findAttachmentsRecursively(full.parts);
+        }
+
         const resp = await fetch(`${config.mantisUrl}/api/mantis-proxy.php`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": config.mantisToken // opcional si tu proxy no lo pide
+                // "Authorization": config.mantisToken // opcional si tu proxy no lo pide
             },
             body: JSON.stringify({
                 mantis_url: config.mantisUrl,     // importante: le pasas la URL base
@@ -36,21 +79,26 @@ async function sendToMantis() {
                 summary: `[MAIL] ${full.headers.subject?.[0] || "Sin asunto"}`,
                 description: `${rawBody}`,
                 project_id: 1,
-                category_id: 1
+                category_id: 1,
+                files: attachments
             })
         });
 
         if (resp.ok) {
             const data = await resp.json();
             const issueId = data.issues?.[0]?.id || data.issue?.id;
-            notify(`Tarea creada: #${issueId}`);
-        } else {
+            notify(`Tarea creada: #${issueId} ${attachments.length ? `(${attachments.length} adjunto${attachments.length > 1 ? 's' : ''})` : ''}`);
+        } else { 
             notify(`Error: ${resp.status} ${await resp.text()}`);
+            console.log("Error al intentar crear tarea:", await resp.text());
         }
     } catch (e) {
+        console.log("Error al crear tarea:", e.message);
         notify("Error de red: " + e.message);
     }
 }
+
+
 
 /**
  * Busca recursivamente la mejor parte de texto plano en un mensaje completo (getFull)

@@ -4,7 +4,6 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Authorization, Content-Type');
 
-$token = 'Y_gWGcWtMQBPjHA2Q2n8HKYFmaNFr1tC';
 $input = file_get_contents("php://input");
 $data  = json_decode($input, true);
 
@@ -18,7 +17,14 @@ $payload = [
     "summary"     => $data["summary"] ?? "Issue desde frontend – FUNCIONA",
     "description" => $data["description"] ?? "¡Por fin!",
     "project"     => ["id" => 1],
-    "category"    => ["name" => "General"]
+    "category"    => ["name" => "General"],
+    "files"       => array_map(function ($f) {
+        return [
+            "name"         => $f["name"],
+            "content"      => $f["content"],
+            "content_type" => $f["content_type"] ?? "application/octet-stream"
+        ];
+    }, $data["files"] ?? [])
 ];
 
 $url = "http://localhost/mantisbt/api/rest/index.php/issues";
@@ -29,7 +35,7 @@ curl_setopt_array($ch, [
     CURLOPT_POST           => true,
     CURLOPT_POSTFIELDS     => json_encode($payload),
     CURLOPT_HTTPHEADER     => [
-        "Authorization: $token",
+        "Authorization: " . $data["token"],
         "Content-Type: application/json",
         "User-Agent: mantisbt-rest"          // ← ESTA LÍNEA ES LA QUE LO ARREGLA TODO
     ],
@@ -41,3 +47,4 @@ curl_close($ch);
 
 http_response_code($httpcode);
 echo $response;
+?>
