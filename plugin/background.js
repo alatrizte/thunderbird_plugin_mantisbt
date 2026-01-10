@@ -1,5 +1,6 @@
 // background.js
-async function sendToMantis() {
+async function sendToMantis(projectFromPopup) {
+    console.log("sendToMantis llamado con proyecto:", projectFromPopup);
     let [tab] = await messenger.tabs.query({ active: true, currentWindow: true });
     let message = await messenger.messageDisplay.getDisplayedMessage(tab.id);
 
@@ -12,9 +13,10 @@ async function sendToMantis() {
     // Extraemos el mejor cuerpo de texto posible
     let rawBody = await extractBestTextBody(full);
 
-    const config = await messenger.storage.sync.get([
+     const config = await messenger.storage.sync.get([
         "mantisUrl",
-        "mantisToken"
+        "mantisToken",
+        "mantisProjects"
     ]);
 
     if (!config.mantisUrl || !config.mantisToken) {
@@ -67,7 +69,7 @@ async function sendToMantis() {
             await findAttachmentsRecursively(full.parts);
         }
 
-        const resp = await fetch(`${config.mantisUrl}/api/mantis-proxy.php`, {
+        const resp = await fetch(`${config.mantisUrl}/mantis-proxy.php`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -78,7 +80,7 @@ async function sendToMantis() {
                 token: config.mantisToken,
                 summary: `[MAIL] ${full.headers.subject?.[0] || "Sin asunto"}`,
                 description: `${rawBody}`,
-                project_id: 1,
+                project_id: projectFromPopup,
                 category_id: 1,
                 files: attachments
             })
@@ -166,9 +168,15 @@ function notify(text) {
     });
 }
 
-// Atajo de teclado y botón contextual
-messenger.commands.onCommand.addListener(command => {
-    if (command === "send-to-mantis") sendToMantis();
+messenger.runtime.onMessage.addListener((msg) => {
+    if (msg.action === "sendToMantis") {
+        sendToMantis(msg.projectFromPopup || null);
+    }
 });
 
-messenger.messageDisplayAction.onClicked.addListener(sendToMantis);
+// Atajo de teclado y botón contextual
+// messenger.commands.onCommand.addListener(command => {
+//     if (command === "send-to-mantis") sendToMantis();
+// });
+
+// messenger.messageDisplayAction.onClicked.addListener(sendToMantis);

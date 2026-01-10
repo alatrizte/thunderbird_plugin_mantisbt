@@ -14,13 +14,15 @@
     },
     "message_display_action": {                
         "default_title": "Enviar a MantisBT",
-        "default_icon": "icons/mantis-128.png"
+        "default_icon": "icons/mantis-128.png",
+        "default_popup": "popup/popup.html"
     },
     "permissions": [
         "messagesRead",
         "activeTab",
         "storage",
         "notifications",
+        "addressBooks",
         "*://127.0.0.1/*",
         "*://localhost/*",
         "http://127.0.0.1/*",
